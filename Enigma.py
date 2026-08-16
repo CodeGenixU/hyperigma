@@ -57,6 +57,17 @@ Usage Example:
     >>> print(decoded)  # 'HELLO'
 """
 
+SCHEMA = {
+    "characters": List[str],
+    "plugs": List[str],
+    "rotors": Dict[str, List[int]],
+    "setting": {
+        "sequence_of_rotor": List[str],
+        "iteration": int,
+        "rotation_factor": int,
+    },
+}
+
 import json
 import logging
 from pathlib import Path
@@ -153,18 +164,18 @@ class Plug:
         return character in self.elements
 
     @staticmethod
-    def test(cycle: str) -> Iterator[InvalidValue]:
+    def test(cycle: str) -> List[InvalidValue]:
         """Validate a plugboard cycle for repeated characters or invalid structure."""
+        errors = []
         if not isinstance(cycle, str):
-            yield InvalidValue(field="Plug", message="Plug cycle must be a string", extra_info=cycle)
-            return
+            errors.append(InvalidValue(field="Plug", message="Plug cycle must be a string", extra_info=cycle))
         if len(cycle) == 0:
-            yield InvalidValue(field="Plug", message="Plug cycle cannot be empty")
-            return
+            errors.append(InvalidValue(field="Plug", message="Plug cycle cannot be empty"))
         unique_chars = set(cycle)
         if len(unique_chars) != len(cycle):
             duplicates = [char for char in unique_chars if cycle.count(char) > 1]
-            yield InvalidValue(field="Plug", message="Duplicate characters found in plugboard cycle", extra_info=duplicates)
+            errors.append(InvalidValue(field="Plug", message="Duplicate characters found in plugboard cycle", extra_info=duplicates))
+        return errors
 
     def __repr__(self) -> str:
         return f"Plug('{self.plug_cycle}')"
@@ -220,22 +231,27 @@ class Plugboard:
         plug = self._char_map.get(character)
         return plug.bplug(character) if plug else character
 
+    def characters(self) -> Set[str]:
+        """Return a set of all characters involved in the plugboard."""
+        return set(self._char_map.keys())
+
     @staticmethod
-    def test(plugs: List[Union[Plug, str]]) -> Iterator[InvalidValue]:
+    def test(plugs: List[str, Plug]) -> List[InvalidValue]:
         """Validate a list of plug cycles for internal duplicates and cross-cycle conflicts."""
         seen_chars: Set[str] = set()
+        errors: List[InvalidValue] = []
         for item in plugs:
             cycle_str = item.plug_cycle if isinstance(item, Plug) else item
-            for err in Plug.test(cycle_str):
-                yield err
+            errors.extend(Plug.test(cycle_str))
             for char in cycle_str:
                 if char in seen_chars:
-                    yield InvalidValue(
+                    errors.append(InvalidValue(
                         field="plugs",
                         message=f"Character '{char}' appears in multiple plug cycles",
                         extra_info=char
-                    )
+                    ))
                 seen_chars.add(char)
+        return errors
 
     def __repr__(self) -> str:
         return f"Plugboard(plugs={[p.plug_cycle for p in self.plugs]})"
@@ -265,7 +281,7 @@ class Rotor:
         self.size = size if size is not None else len(wiring)
         self.name = name or "Rotor"
 
-        errors = list(self.test(wiring, self.size))
+        errors = self.test(wiring, self.size)
         if errors:
             raise ValidationError(f"Invalid rotor wiring for '{self.name}': {errors[0].message}")
 
@@ -274,30 +290,32 @@ class Rotor:
         for i, val in enumerate(self.rotor):
             self.reverse_rotor[val] = i
 
-    def fcode(self, n: int, pointer: int = 0) -> int:
+    def fcode(self, n: int, pointer: int) -> int:
         """Forward encoding of character index n given current pointer offset."""
         input_index = (n + pointer) % self.size
         output_shifted = self.rotor[input_index]
         return (output_shifted - pointer) % self.size
 
-    def bcode(self, n: int, pointer: int = 0) -> int:
+    def bcode(self, n: int, pointer: int) -> int:
         """Backward encoding of character index n given current pointer offset."""
         input_shifted = (n + pointer) % self.size
         output_shifted = self.reverse_rotor[input_shifted]
         return (output_shifted - pointer) % self.size
 
     @staticmethod
-    def test(rotor: List[int], size: int) -> Iterator[InvalidValue]:
+    def test(rotor: List[int], size: int) -> List[InvalidValue]:
         """Validate rotor wiring as a valid permutation of 0 to size-1."""
+        errors = []
+
         if not isinstance(rotor, list):
-            yield InvalidValue(field="Rotor", message="Rotor wiring must be a list of integers")
-            return
+            errors.append(InvalidValue(field="Rotor", message="Rotor wiring must be a list of integers"))
+
         if len(rotor) != size:
-            yield InvalidValue(
+            errors.append(InvalidValue(
                 field="Rotor",
                 message=f"Rotor wiring length ({len(rotor)}) does not match character set size ({size})"
-            )
-            return
+            ))
+            return errors
 
         expected_indices = set(range(size))
         rotor_set = set(rotor)
@@ -305,9 +323,10 @@ class Rotor:
         missing_elements = list(expected_indices - rotor_set)
 
         if extra_elements:
-            yield InvalidValue(field="Rotor", message="Extra elements found in rotor wiring", extra_info=extra_elements)
+            errors.append(InvalidValue(field="Rotor", message="Extra elements found in rotor wiring", extra_info=extra_elements))
         if missing_elements:
-            yield InvalidValue(field="Rotor", message="Missing elements found in rotor wiring", extra_info=missing_elements)
+            errors.append(InvalidValue(field="Rotor", message="Missing elements found in rotor wiring", extra_info=missing_elements))
+        return errors
 
     def __repr__(self) -> str:
         return f"Rotor(name='{self.name}', size={self.size})"
@@ -352,14 +371,14 @@ class RotorState:
         """Advance rotor pointer by steps."""
         self.pointer = (self.pointer + steps) % self.size
 
-    def update_pointer(self, iteration: int, rotation_base: Optional[int] = None) -> None:
+    def update_pointer(self, iteration: int) -> None:
         """
         Update pointer based on iteration count and position using base-N stepping math.
         
         Formula: pointer = (iteration // (rotation_base ** position)) % size
         """
-        base = rotation_base if (rotation_base and rotation_base > 0) else self.rotation_base
-        divisor = base ** self.position
+
+        divisor = self.rotation_base ** self.position
         self.pointer = (iteration // divisor) % self.size
 
     def fcode(self, n: int) -> int:
@@ -370,14 +389,87 @@ class RotorState:
         """Backward encoding through the underlying rotor at current pointer."""
         return self.rotor.bcode(n, self.pointer)
 
-    def reset(self, pointer: int = 0) -> None:
-        """Reset pointer to specified value."""
-        self.pointer = pointer % self.size
-
     def __repr__(self) -> str:
         return f"RotorState(name='{self.name}', position={self.position}, pointer={self.pointer})"
 
+class Axle:
 
+    def __init__(self, n : int, sequence : List[str], rotors: Dict[str, List[int]]) -> None:
+
+        error = self.validate(n, sequence, rotors)
+        if error:
+            raise ValidationError(f"Invalid Axle configuration: {error[0].message}")
+        self.sequence = sequence
+        self.size = n
+        self.rotors = {key: Rotor(rotors[key], size=n, name=key) for key in sequence}
+
+    @staticmethod
+    def validate(n: int, sequence: List[str], rotors: Dict[str, List[int]]) -> List[InvalidValue]:
+
+        errors = []
+        for rname in sequence:
+            if rname not in rotors:
+                errors.append(InvalidValue(field="Axle", message=f"Rotor '{rname}' not defined in rotors"))
+            else:
+                errors.extend(Rotor.test(rotors[rname], n))
+        return errors
+
+    def get(self):
+        for i in self.sequence:
+            yield self.rotors[i] 
+class CharacterList:
+    """
+    Reusable component for validating and managing the character set used in the Enigma machine.
+    Ensures uniqueness and single-character constraints.
+    """
+    def __init__(self, characters: List[str]) -> None:
+        """
+        Initialize CharacterList with validation.
+        
+        Args:
+            characters (List[str]): List of characters to be used in the machine.
+            
+        Raises:
+            ValidationError: If character list is invalid (duplicates or non-single characters).
+        """
+        errors = self.test(characters)
+        if errors:
+            raise ValidationError(f"Invalid character list: {errors[0].message}")
+
+        self.characters = list(characters)
+        self.char_to_idx = {char: i for i, char in enumerate(self.characters)}
+        self.idx_to_char = {i: char for i, char in enumerate(self.characters)}
+        self.size = len(self.characters)
+
+    def fcode(self, char: str) -> int:
+        """Get index of character in the character set."""
+        if char not in self.char_to_idx:
+            raise InvalidCharacterError(f"Character '{char}' is not in the configured character set")
+        return self.char_to_idx[char]
+
+    def bcode(self, index: int) -> str:
+        """Get character corresponding to index in the character set."""
+        if index < 0 or index >= self.size:
+            raise IndexError(f"Index {index} is out of bounds for character set of size {self.size}")
+        return self.idx_to_char[index]
+
+    @staticmethod
+    def test(characters: List[str]) -> List[InvalidValue]:
+        """Validate character list for duplicates and non-single characters."""
+        errors = []
+        if not isinstance(characters, list):
+            errors.append(InvalidValue(field="characters", message="Characters must be a list"))
+
+        unique_characters = set(characters)
+        if len(characters) != len(unique_characters):
+            duplicates = [char for char in unique_characters if characters.count(char) > 1]
+            errors.append(InvalidValue(field="characters", message="Duplicate characters found", extra_info=duplicates))
+
+        non_single_chars = [char for char in characters if not isinstance(char, str) or len(char) != 1]
+        if non_single_chars:
+            errors.append(InvalidValue(field="characters", message="Non-single character elements found", extra_info=non_single_chars))
+
+        return errors
 # ============================================================================
 # Configuration Handling & Validation
 # ============================================================================
@@ -393,17 +485,14 @@ class Configuration:
         Args:
             config (Union[dict, str, Path]): Config dict or file path.
         """
-        if isinstance(config, Configuration):
-            self.raw_config = config.raw_config
-            self._load_from_dict(self.raw_config)
-        elif isinstance(config, dict):
+        if isinstance(config, dict):
             self.raw_config = config
             self._load_from_dict(config)
         elif isinstance(config, (str, Path)):
             self.raw_config = self._read_json_file(config)
             self._load_from_dict(self.raw_config)
         else:
-            raise TypeError("Config must be a dict, Path, str, or Configuration object.")
+            raise TypeError("Config must be a dict, Path or str.")
 
     @staticmethod
     def _read_json_file(file_path: Union[str, Path]) -> dict:
@@ -417,96 +506,113 @@ class Configuration:
         except Exception as e:
             raise ConfigurationError(f"Error reading configuration file '{file_path}': {e}")
 
+    @staticmethod
     def _load_from_dict(self, config: dict) -> None:
         # Perform comprehensive pretest
-        errors = list(pretest(config, raise_on_error=False))
+        errors = []
+        errors.extend(self.schemaValidate(config))
+        if errors:
+            error_msgs = [f"{err.field}: {err.message}" for err in errors]
+            raise ValidationError("Configuration validation failed:\n" + "\n".join(error_msgs))
+        errors.extend(self.component_validate(config))
         if errors:
             error_msgs = [f"{err.field}: {err.message}" for err in errors]
             raise ValidationError("Configuration validation failed:\n" + "\n".join(error_msgs))
 
         try:
-            self.characters = config["characters"]
+            self.characters = CharacterList(config["characters"])   
+            self.number_of_characters = len(self.characters)
+            self.plugboard = Plugboard(config["plugs"])
             setting = config["setting"]
-            
-            # Normalize sequence_of_rotor: could be "r1>r2>r3" or ["r1", "r2", "r3"]
-            seq = setting["sequence_of_rotor"]
-            if isinstance(seq, str):
-                self.sequence_of_rotor = seq.split(">")
-            elif isinstance(seq, list):
-                self.sequence_of_rotor = seq
-            else:
-                raise ConfigurationError("sequence_of_rotor must be a string (e.g. 'r1>r2') or list of strings")
-
-            self.number_of_rotors = setting.get("number_of_rotors", len(self.sequence_of_rotor))
+            self.sequence_of_rotor = setting["sequence_of_rotor"]
             self.iteration = setting["iteration"]
             self.rotation_factor = setting["rotation_factor"]
-            self.plugs = setting["plugs"]
             self.rotors: Dict[str, List[int]] = {key: config[key] for key in self.sequence_of_rotor}
-            self.number_of_characters = len(self.characters)
+            
         except KeyError as e:
             raise ConfigurationError(f"Missing required configuration field: {e}")
         except Exception as e:
             raise ConfigurationError(f"Error loading configuration: {e}")
 
     @staticmethod
-    def metadata(config: dict) -> Iterator[InvalidValue]:
-        """Validate metadata fields in configuration dictionary."""
+    def schemaValidate(config: dict) -> List[InvalidValue]:
+        """Validate configuration dictionary against expected schema."""
+        errors = []
         if not isinstance(config, dict):
-            yield InvalidValue(field="config", message="Configuration must be a dictionary")
-            return
+            errors.append(InvalidValue(field="config", message="Configuration must be a dictionary"))
+            return errors
 
-        if "characters" not in config or not config["characters"]:
-            yield InvalidValue(field="characters", message="Character list is missing or empty")
+        # Check for required top-level keys
+        required_keys = ["characters", "rotors", "setting"]
+        for key in required_keys:
+            if key not in config:
+                errors.append(InvalidValue(field=key, message=f"Missing required key '{key}'"))
 
-        if "setting" not in config or not isinstance(config["setting"], dict):
-            yield InvalidValue(field="setting", message="'setting' dictionary missing from configuration")
-            return
-
-        setting = config["setting"]
-        for required_key in ["sequence_of_rotor", "iteration", "rotation_factor", "plugs"]:
-            if required_key not in setting:
-                yield InvalidValue(field=f"setting.{required_key}", message=f"Missing setting key '{required_key}'")
-
-        seq = setting.get("sequence_of_rotor")
-        if isinstance(seq, str):
-            rotor_names = seq.split(">")
-        elif isinstance(seq, list):
-            rotor_names = seq
+        # Validate 'setting' structure
+        setting = config.get("setting", {})
+        if not isinstance(setting, dict):
+            errors.append(InvalidValue(field="setting", message="'setting' must be a dictionary"))
         else:
-            rotor_names = []
-            yield InvalidValue(field="setting.sequence_of_rotor", message="Invalid sequence_of_rotor format")
+            required_setting_keys = ["sequence_of_rotor", "iteration", "rotation_factor", "plugs"]
+            for s_key in required_setting_keys:
+                if s_key not in setting:
+                    errors.append(InvalidValue(field=f"setting.{s_key}", message=f"Missing setting key '{s_key}'"))
 
-        for rname in rotor_names:
-            if rname not in config:
-                yield InvalidValue(field=rname, message=f"Rotor configuration for '{rname}' missing from config")
+        rotors = config.get("rotors", {})
+        if not isinstance(rotors, dict):
+            errors.append(InvalidValue(field="rotors", message="'rotors' must be a dictionary"))
+        else:
+            for wiring in rotors.values():
+                if not isinstance(wiring, list):
+                    errors.append(InvalidValue(field=f"rotors.{rname}", message="Rotor wiring must be a list of integers"))
+
+        rotor_sequence = setting.get("sequence_of_rotor")
+        if not isinstance(rotor_sequence, list):
+            errors.append(InvalidValue(field="setting.sequence_of_rotor", message="'sequence_of_rotor' must be a list"))
+        else:
+            for i in rotor_sequence:
+                if i not in rotors:
+                    errors.append(InvalidValue(field="setting.sequence_of_rotor", message=f"Rotor '{i}' not defined in 'rotors'"))
+                    
+        return errors
 
     @staticmethod
-    def character_list_test(characters: List[str]) -> Iterator[InvalidValue]:
+    def character_list_validate(characters: List[str]) -> List[InvalidValue]:
         """Validate character list for duplicates and valid single-char elements."""
-        if not isinstance(characters, list):
-            yield InvalidValue(field="characters", message="Characters must be a list")
-            return
-
-        unique_characters = set(characters)
-        if len(characters) != len(unique_characters):
-            duplicates = [char for char in unique_characters if characters.count(char) > 1]
-            yield InvalidValue(field="characters", message="Duplicate characters found", extra_info=duplicates)
-
-        non_single_chars = [char for char in characters if not isinstance(char, str) or len(char) != 1]
-        if non_single_chars:
-            yield InvalidValue(field="characters", message="Non-single character elements found", extra_info=non_single_chars)
+        return CharacterList.test(characters)
 
     @staticmethod
-    def plug_test(plugs: List[str]) -> Iterator[InvalidValue]:
+    def plug_validate(plugs: List[str]) -> Iterator[InvalidValue]:
         """Validate plugboard configuration."""
-        yield from Plugboard.test(plugs)
+        return Plug.test(plugs)
 
     @staticmethod
-    def rotor_test(n: int, rotors: Dict[str, List[int]]) -> Iterator[InvalidValue]:
+    def rotor_validate(n: int, rotor: List[int]) -> Iterator[InvalidValue]:
         """Validate all rotors in dictionary against size n."""
-        for rname, wiring in rotors.items():
-            yield from Rotor.test(wiring, n)
+        return Rotor.test(rotor, n)
 
+    @staticmethod
+    def plugboard_validate(plugs: List[str]) -> List[InvalidValue]:
+        """Validate plugboard configuration for duplicates and conflicts."""
+        return Plugboard.test(plugs)
+
+    @staticmethod
+    def axle_validate(n: int, sequence: List[str], rotors: Dict[str, List[int]]) -> List[InvalidValue]:
+        """Validate axle configuration (sequence and rotor definitions)."""
+        return Axle.validate(n, sequence, rotors)
+
+    @staticmethod
+    def component_validate(config: dict) -> List[InvalidValue]:
+        """Validate all components of the configuration."""
+        errors = []
+        errors.extend(Configuration.character_list_validate(config.get("characters", [])))
+        errors.extend(Configuration.plugboard_validate(config.get("plugs", [])))
+
+        n = len(config.get("characters", []))
+        rotors = config.get("rotors", {})
+        
+        
+        return errors
     def add_rotor(
         self,
         name: str,
@@ -566,6 +672,23 @@ class Configuration:
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(self.raw_config, f, indent=4)
 
+    def initialize_enigma(self):
+        
+
+        return Enigma(self.raw_config)
+
+    def validate(self) -> List[InvalidValue]:
+        """Run comprehensive validation on the configuration."""
+        errors = []
+        errors.extend(CharacterList.test(self.characters.characters))
+        errors.extend(Plugboard.test(self.plugboard.plugs ))
+        for i in self.sequence_of_rotor:
+            if i in self.rotors:
+                errors.extend(Rotor.test(self.rotors[i], self.number_of_characters))
+            else:
+                errors.append(InvalidValue(field="rotors", message=f"Rotor '{i}' not defined in configuration"))
+        errors.extend(self.component_validate(self.raw_config))
+        return errors
 
 def pretest(config: Union[dict, str, Path], raise_on_error: bool = False) -> List[InvalidValue]:
     """
@@ -578,15 +701,7 @@ def pretest(config: Union[dict, str, Path], raise_on_error: bool = False) -> Lis
     Returns:
         List[InvalidValue]: List of validation errors encountered.
     """
-    if isinstance(config, (str, Path)):
-        try:
-            with open(config, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-        except Exception as e:
-            err = InvalidValue(field="file", message=f"Failed to load JSON configuration file: {e}")
-            if raise_on_error:
-                raise ValidationError(err.message)
-            return [err]
+    
 
     errors: List[InvalidValue] = []
 
@@ -920,3 +1035,4 @@ class Enigma:
             rstate.position = pos
             rstate.rotation_base = self.rotation_base
             rstate.update_pointer(self.iteration, self.rotation_base)
+ 
