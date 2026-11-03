@@ -1,4 +1,4 @@
-from typing import List, Dict, Set
+from typing import Union, List, Tuple, Dict, Set
 
 from ..exceptions import ValidationError
 from ..DTO.invalid_values import InvalidValue
@@ -8,7 +8,7 @@ class Plug:
     Reusable component representing a single plugboard cycle.
     Swaps characters cyclically before and after rotor processing.
     """
-    def __init__(self, plug_cycle: str) -> None:
+    def __init__(self, plug_cycle: Union[List[str], Tuple[str, ...], str]) -> None:
         """
         Initialize the plugboard cycle with O(1) lookup tables.
         
@@ -22,14 +22,13 @@ class Plug:
         if errors:
             raise ValidationError(f"Invalid plug cycle '{plug_cycle}': {errors[0].message}")
 
-        self.plug = plug_cycle
-        self.elements: Set[str] = set(plug_cycle)
+        self.plug = tuple(plug_cycle)
         n = len(plug_cycle)
 
         # Forward mapping: char -> next char in cycle
-        self._f_map: Dict[str, str] = {plug_cycle[i]: plug_cycle[(i + 1) % n] for i in range(n)} if n > 0 else {}
+        self._f_map: Dict[str, str] = {plug_cycle[i]: plug_cycle[(i + 1) % n] for i in range(n)}
         # Backward mapping: char -> previous char in cycle
-        self._b_map: Dict[str, str] = {plug_cycle[i]: plug_cycle[(i - 1) % n] for i in range(n)} if n > 0 else {}
+        self._b_map: Dict[str, str] = {plug_cycle[i]: plug_cycle[(i - 1) % n] for i in range(n)}
 
     def fplug(self, character: str) -> str:
         """Swap character using the plugboard cycle in forward direction in O(1) time."""
@@ -44,12 +43,12 @@ class Plug:
         return character in self.elements
 
     @staticmethod
-    def test(cycle: str) -> List[InvalidValue]:
+    def test(cycle: Union[List[str], Tuple[str, ...], Set[str], str]) -> List[InvalidValue]:
         """Validate a plugboard cycle for repeated characters or invalid structure."""
 
         errors = []
 
-        if not isinstance(cycle, str):
+        if not isinstance(cycle, (str, list, tuple)):
             errors.append(InvalidValue(field="Plug", message="Plug cycle must be a string", extra_info=cycle))
 
         if len(cycle) == 0:
@@ -63,8 +62,11 @@ class Plug:
         return errors
 
     def __repr__(self) -> str:
-        return f"Plug('{self.plug_cycle}')"
+        return f"Plug('{self.plug}')"
 
+    def __str__(self) -> str:
+        return ''.join(self.plug)
+    
     # def __eq__(self, other: object) -> bool:
     #     if isinstance(other, Plug):
     #         return self.plug_cycle == other.plug_cycle

@@ -1,4 +1,4 @@
-from typing import List
+from typing import Optional, List, Tuple, Set, Dict, Union
 
 from ..exceptions import ValidationError, InvalidCharacterError
 from ..DTO.invalid_values import InvalidValue
@@ -8,12 +8,12 @@ class CharacterSet:
     Reusable component for validating and managing the character set used in the Enigma machine.
     Ensures uniqueness and single-character constraints.
     """
-    def __init__(self, characters: List[str]) -> None:
+    def __init__(self, characters: Union[List[str], Tuple[str, ...], Set[str]]) -> None:
         """
         Initialize CharacterSet with validation.
         
         Args:
-            characters (List[str]): List of characters to be used in the machine.
+            characters (Union[List[str], Tuple[str, ...], Set[str]]): List of characters to be used in the machine.
             
         Raises:
             ValidationError: If character list is invalid (duplicates or non-single characters).
@@ -22,7 +22,7 @@ class CharacterSet:
         if errors:
             raise ValidationError(f"Invalid character list: {errors[0].message}")
 
-        self.characters = tuple(characters)
+        self.characters = set(characters)
         self.char_to_idx = {char: i for i, char in enumerate(self.characters)}
         self.idx_to_char = {i: char for i, char in enumerate(self.characters)}
         self.size = len(self.characters)
@@ -40,13 +40,13 @@ class CharacterSet:
         return self.idx_to_char[index]
 
     @staticmethod
-    def test(characters: List[str]) -> List[InvalidValue]:
+    def test(characters: Union[List[str], Tuple[str, ...], Set[str]]) -> List[InvalidValue]:
         """Validate character list for duplicates and non-single characters."""
 
         errors = []
 
-        if not isinstance(characters, list):
-            errors.append(InvalidValue(field="characters", message="Characters must be a list"))
+        if not isinstance(characters, (list, tuple, set)):
+            errors.append(InvalidValue(field="characters", message="Characters must be a list, tuple, or set"))
 
         unique_characters = set(characters)
         if len(characters) != len(unique_characters):
@@ -60,7 +60,13 @@ class CharacterSet:
         return errors
 
     def __repr__(self) -> str:
-        return f"CharacterSet({self.characters})"
+        l = [None] * self.size
+        for char, idx in self.char_to_idx.items():
+            l[idx] = char
+        return f"CharacterSet({l})"
 
     def __len__(self) -> int:
         return self.size
+
+    def __contains__(self, char: str) -> bool:
+        return char in self.characters

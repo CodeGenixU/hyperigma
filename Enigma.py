@@ -64,8 +64,10 @@ import logging
 from pathlib import Path
 from dataclasses import dataclass
 from typing import List, Dict, Union, Optional, Tuple, Iterator, Any, Set
+from pydantic import BaseModel, ValidationError
 
 from components.configuration.configuration import Configuration
+from components.exceptions.character import InvalidCharacterError
 from components.mechanism.axle import Axle
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -75,24 +77,7 @@ if not logger.handlers:
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
-
-# Exception hierarchy
-
-
-
-
-
-
-
-
-
-
 class Enigma:
-    """
-    Main Enigma machine class orchestrating rotors, plugboard, and character encoding.
-    Decoupled architecture supporting direct injection of reusable component objects.
-    """
-
     def __init__(
         self,
         config: Configuration = None
@@ -105,12 +90,13 @@ class Enigma:
         if config is None:
             raise ValueError("Configuration must be provided to initialize Enigma")
 
-        self.characterset = config.characters
+        if not config.validate():
+            raise ValidationError("Configuration validation failed")
+        self.characterSet = config.characters
         self.plugboard = config.plugboard
-        self.shaft = config.shaft
         self.pointer = config.iteration
-        self.size = self.characterset.size
-        self.axle = Axle(self.shaft)
+        self.size = config.size
+        self.axle = Axle(config.shaft)
 
         # Log initialization
         logger.info(f"Enigma initialized")
@@ -134,13 +120,16 @@ class Enigma:
         Raises:
             InvalidCharacterError: If character is not in configured character set.
         """
-        
+
+        if char not in self.characterSet:
+            raise InvalidCharacterError(f"Character '{char}' is not in the configured character set")
+
         # 1. Plugboard forward mapping
         c1 = self.plugboard.fplug(char)
         #print(f"Plugboard forward mapping: {char} -> {c1}")
 
         # 2. Convert character to index
-        idx = self.characterset.fcode(c1)
+        idx = self.characterSet.fcode(c1)
         #print(f"Character to index: {c1} -> {idx}")
 
         # 3. Pass forward through rotor states (from position 0 to N-1)
@@ -156,7 +145,7 @@ class Enigma:
         #print(f"Backward rotor mapping: {refl} -> {r2}")
 
         # 6. Convert index back to character
-        c2 = self.characterset.bcode(r2)
+        c2 = self.characterSet.bcode(r2)
         #print(f"Index to character: {r2} -> {c2}")
 
         # 7. Plugboard backward mapping

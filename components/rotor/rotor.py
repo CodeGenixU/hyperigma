@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Union, Dict, Set, Tuple
 
 from ..exceptions import ValidationError
 from ..DTO.invalid_values import InvalidValue
@@ -8,12 +8,12 @@ class Rotor:
     Reusable component representing an immutable rotor wiring specification.
     Stateless with respect to machine position/stepping.
     """
-    def __init__(self, wiring: List[int], size: Optional[int] = None, name: Optional[str] = None) -> None:
+    def __init__(self, wiring: Union[List[int], Tuple[int, ...]], size: Optional[int] = None, name: Optional[str] = None) -> None:
         """
         Initialize the Rotor with wiring indices.
         
         Args:
-            wiring (List[int]): Permutation of indices from 0 to size-1.
+            wiring (Union[List[int], Tuple[int, ...]]): Permutation of indices from 0 to size-1.
             size (Optional[int]): Total size of character set. Inferred from wiring length if None.
             name (Optional[str]): Optional descriptive name (e.g., 'r1').
             
@@ -21,7 +21,7 @@ class Rotor:
             ValidationError: If wiring is not a valid permutation.
         """
         self.size = size if size is not None else len(wiring)
-        self.name = name or "Rotor"
+        self.name = name or None 
 
         errors = self.test(wiring, self.size)
         if errors:
@@ -52,8 +52,8 @@ class Rotor:
         """Validate rotor wiring as a valid permutation of 0 to size-1."""
         errors = []
 
-        if not isinstance(rotor, list):
-            errors.append(InvalidValue(field="Rotor", message="Rotor wiring must be a list of integers"))
+        if not isinstance(rotor, (list, tuple)):
+            errors.append(InvalidValue(field="Rotor", message="Rotor wiring must be a list or tuple of integers"))
 
         if len(rotor) != size:
             errors.append(InvalidValue(
