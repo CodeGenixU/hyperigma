@@ -221,4 +221,5 @@ __marimo__/
 
 .aider*
 components/configuration/temp.py
-**/__pycache__/
+__pycache__/
+.github

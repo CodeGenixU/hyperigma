@@ -1,6 +1,8 @@
+"""Represent and validate a single cyclic plugboard mapping."""
+
 from typing import Union, List, Tuple, Dict, Set
 
-from ..exceptions import ValidationError
+from ..exceptions import PlugValidationError
 from ..DTO.invalid_values import InvalidValue
 
 class Plug:
@@ -10,17 +12,17 @@ class Plug:
     """
     def __init__(self, plug_cycle: Union[List[str], Tuple[str, ...], str]) -> None:
         """
-        Initialize the plugboard cycle with O(1) lookup tables.
+        Initialize the plugboard cycle with constant-time lookup tables.
         
         Args:
             plug_cycle (str): String representing the cycle (e.g., "ABCD").
             
         Raises:
-            ValidationError: If cycle contains duplicate characters or is empty.
+            PlugValidationError: If the cycle contains duplicate characters or is empty.
         """
         errors = list(self.test(plug_cycle))
         if errors:
-            raise ValidationError(f"Invalid plug cycle '{plug_cycle}': {errors[0].message}")
+            raise PlugValidationError("Invalid plug cycle", errors=errors)
 
         self.plug = tuple(plug_cycle)
         n = len(plug_cycle)
@@ -31,40 +33,85 @@ class Plug:
         self._b_map: Dict[str, str] = {plug_cycle[i]: plug_cycle[(i - 1) % n] for i in range(n)}
 
     def fplug(self, character: str) -> str:
-        """Swap character using the plugboard cycle in forward direction in O(1) time."""
+        """Swap a character in the forward direction.
+
+        Args:
+            character: Character to map.
+
+        Returns:
+            The mapped character, or character when unmapped.
+        """
         return self._f_map.get(character, character)
 
     def bplug(self, character: str) -> str:
-        """Swap character using the plugboard cycle in backward direction in O(1) time."""
+        """Swap a character in the backward direction.
+
+        Args:
+            character: Character to map.
+
+        Returns:
+            The mapped character, or character when unmapped.
+        """
         return self._b_map.get(character, character)
 
     def isplug(self, character: str) -> bool:
-        """Check if character is part of this plugboard cycle."""
-        return character in self.elements
+        """Check whether a character belongs to this cycle.
+
+        Args:
+            character: Character to test.
+
+        Returns:
+            True when character belongs to the cycle.
+        """
+        return character in self.plug
 
     @staticmethod
     def test(cycle: Union[List[str], Tuple[str, ...], Set[str], str]) -> List[InvalidValue]:
-        """Validate a plugboard cycle for repeated characters or invalid structure."""
+        """Validate a plugboard cycle.
+
+        Args:
+            cycle: Cycle characters to validate.
+
+        Returns:
+            Validation errors, or an empty list when valid.
+        """
 
         errors = []
 
         if not isinstance(cycle, (str, list, tuple)):
-            errors.append(InvalidValue(field="Plug", message="Plug cycle must be a string", extra_info=cycle))
+            errors.append(InvalidValue(
+                field="plug",
+                code="invalid_type",
+                message="Plug cycle must be a string",
+                extra_info=cycle,
+            ))
+            return errors
 
         if len(cycle) == 0:
-            errors.append(InvalidValue(field="Plug", message="Plug cycle cannot be empty"))
+            errors.append(InvalidValue(
+                field="plug",
+                code="empty_cycle",
+                message="Plug cycle cannot be empty",
+            ))
 
         unique_chars = set(cycle)
         if len(unique_chars) != len(cycle):
             duplicates = [char for char in unique_chars if cycle.count(char) > 1]
-            errors.append(InvalidValue(field="Plug", message="Duplicate characters found in plugboard cycle", extra_info=duplicates))
+            errors.append(InvalidValue(
+                field="plug",
+                code="duplicate_character",
+                message="Duplicate characters found in plugboard cycle",
+                extra_info=duplicates,
+            ))
 
         return errors
 
     def __repr__(self) -> str:
+        """Represent the plug cycle for debugging."""
         return f"Plug('{self.plug}')"
 
     def __str__(self) -> str:
+        """Return the plug cycle as a string."""
         return ''.join(self.plug)
     
     # def __eq__(self, other: object) -> bool:

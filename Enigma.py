@@ -50,6 +50,10 @@ Exceptions:
 
 Usage Example:
 -------------
+Usage: python Enigma.py
+When run as a script, load ``configure.json`` and print an example
+encode/decode demonstration.
+
     >>> from Enigma import Enigma, Rotor, RotorState, Plug, Plugboard
     >>> enigma = Enigma("configure.json")
     >>> encoded = enigma.encode("HELLO")
@@ -59,15 +63,11 @@ Usage Example:
 
 
 
-import json
 import logging
-from pathlib import Path
-from dataclasses import dataclass
-from typing import List, Dict, Union, Optional, Tuple, Iterator, Any, Set
-from pydantic import BaseModel, ValidationError
 
 from components.configuration.configuration import Configuration
 from components.exceptions.character import InvalidCharacterError
+from components.exceptions.configuration import ValidationError
 from components.mechanism.axle import Axle
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -78,20 +78,33 @@ if not logger.handlers:
     )
 
 class Enigma:
+    """Coordinate the configured rotors and plugboard for Enigma encoding."""
+
     def __init__(
         self,
         config: Configuration = None
     ) -> None:
         """
-        Initialize Enigma machine from a configuration file/dict, OR via direct component injection.
+        Initialize the Enigma machine from a validated configuration.
+
+        Args:
+            config: Configuration containing the character set, plugboard, and shaft.
+
+        Raises:
+            ValueError: If no configuration is provided.
+            TypeError: If config is not a Configuration instance.
+            ValidationError: If the configuration is invalid.
         """
         logger.debug("Initializing Enigma machine components")
 
         if config is None:
             raise ValueError("Configuration must be provided to initialize Enigma")
 
+        if not isinstance(config, Configuration):
+            raise TypeError("config must be a Configuration instance")
+
         if not config.validate():
-            raise ValidationError("Configuration validation failed")
+            raise ValidationError("Invalid Enigma configuration")
         self.characterSet = config.characters
         self.plugboard = config.plugboard
         self.pointer = config.iteration
@@ -103,13 +116,19 @@ class Enigma:
 
     def reflector(self, index: int) -> int:
         """
-        Reflector logic: reverses the signal by mapping index to its complement.
+        Reflect an index across the configured character range.
+
+        Args:
+            index: Character index to reflect.
+
+        Returns:
+            The reflected character index.
         """
         return (self.size - 1) - index
     
     def main(self, char: str) -> str:
         """
-        Encode/Decode a single character using the Enigma machine logic and step the machine.
+        Encode one character and advance the machine.
         
         Args:
             char (str): Character to encode or decode.
@@ -159,11 +178,25 @@ class Enigma:
         return final_char
 
     def encode(self, text: str) -> str:
-        """Encode an entire text string."""
+        """Encode a complete text string.
+
+        Args:
+            text: Text to encode.
+
+        Returns:
+            The encoded text.
+        """
         return ''.join(self.main(c) for c in text)
 
     def decode(self, text: str) -> str:
-        """Decode an entire text string (alias for encode)."""
+        """Decode a complete text string using the same reversible process.
+
+        Args:
+            text: Text to decode.
+
+        Returns:
+            The decoded text.
+        """
         return self.encode(text)
     
 if __name__ == "__main__":
