@@ -8,14 +8,14 @@ from ..exceptions import (
     CharacterSetValidationError,
     ConfigurationLoadError,
     ConfigurationValidationError,
-    PlugboardValidationError,
+    PlugRegistryValidationError,
     ShaftValidationError,
 )
 from ..DTO.invalid_values import InvalidValue
 
 from ..character.character_set import CharacterSet
 from ..mechanism.shaft import Shaft
-from ..plug.plugboard import Plugboard
+from ..plug.plug_registry import PlugRegistry
 
 SCHEMA = {
     "characters": List[str],
@@ -42,7 +42,7 @@ class Configuration:
         """
         
         self.characters: CharacterSet = None   
-        self.plugboard: Plugboard = None
+        self.registry: PlugRegistry = None
         self.shaft: Shaft = None
 
         self.iteration: int = None
@@ -110,11 +110,11 @@ class Configuration:
             self.add_characters(CharacterSet(config["characters"]))
 
 
-        errors.extend(Plugboard.test(config["plugs"]))
+        errors.extend(PlugRegistry.test(config["plugs"]))
         if errors:
-            raise PlugboardValidationError("Invalid plugboard", errors=errors)
+            raise PlugRegistryValidationError("Invalid plugregistry", errors=errors)
         else:
-            self.add_plugboard(Plugboard(config["plugs"]))
+            self.add_plugregistry(PlugRegistry(config["plugs"]))
 
         errors.extend(Shaft.test(self.size, config["setting"]["sequence"], config["rotors"]))
         if errors:
@@ -263,51 +263,51 @@ class Configuration:
         self.characters = character
         self.size = len(character)
 
-    def add_plugboard(self,plugboard: Plugboard) -> None:
-        """Add a plugboard to the configuration.
+    def add_plugregistry(self,registry: PlugRegistry) -> None:
+        """Add a plug registry to the configuration.
 
         Args:
-            plugboard: Plugboard to add.
+            registry: PlugRegistry to add.
         """
         if self.characters is None:
-            raise PlugboardValidationError(
-                "Invalid plugboard",
+            raise PlugRegistryValidationError(
+                "Invalid plugregistry",
                 errors=[InvalidValue(
                     field="characters",
                     code="missing_dependency",
-                    message="CharacterSet must be set before adding a plugboard",
+                    message="CharacterSet must be set before adding a plugregistry",
                 )],
             )
-        if self.plugboard is not None:
-            raise PlugboardValidationError(
-                "Invalid plugboard",
+        if self.registry is not None:
+            raise PlugRegistryValidationError(
+                "Invalid plugregistry",
                 errors=[InvalidValue(
-                    field="plugboard",
+                    field="plugregistry",
                     code="already_set",
-                    message="Plugboard has already been set",
+                    message="PlugRegistry has already been set",
                 )],
             )
-        if not isinstance(plugboard, Plugboard):
-            raise PlugboardValidationError(
-                "Invalid plugboard",
+        if not isinstance(registry, PlugRegistry):
+            raise PlugRegistryValidationError(
+                "Invalid plugregistry",
                 errors=[InvalidValue(
-                    field="plugboard",
+                    field="plugregistry",
                     code="invalid_type",
-                    message="Expected a Plugboard instance",
+                    message="Expected a PlugRegistry instance",
                 )],
             )
-        unknown = set(plugboard.characters()).difference(self.characters.characters)
-        if unknown:
-            raise PlugboardValidationError(
-                "Invalid plugboard",
+        conflicts = set(registry.characters()).difference(self.characters.characters)
+        if conflicts:
+            raise PlugRegistryValidationError(
+                "Invalid plugregistry",
                 errors=[InvalidValue(
                     field="plugs",
                     code="unknown_character",
                     message="Contains characters outside the configured character set",
-                    extra_info=sorted(unknown),
+                    extra_info=sorted(conflicts),
                 )],
             )
-        self.plugboard = plugboard
+        self.registry = registry
 
     def add_shaft(self, shaft: Shaft) -> None:
         """Add a rotor shaft to the configuration.
@@ -362,7 +362,7 @@ class Configuration:
 
         if self.characters is None or isinstance(self.characters, CharacterSet) == False:
             return False
-        if self.plugboard is None or isinstance(self.plugboard, Plugboard) == False:
+        if self.registry is None or isinstance(self.registry, PlugRegistry) == False:
             return False
         if self.shaft is None or isinstance(self.shaft, Shaft) == False:
             return False

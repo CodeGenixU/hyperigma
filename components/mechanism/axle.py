@@ -3,7 +3,7 @@
 
 from ..rotor.rotor import Rotor
 from ..rotor.rotor_state import RotorState
-from ..exceptions import ShaftValidationError
+from ..exceptions import AxleValidationError
 from ..DTO.invalid_values import InvalidValue
 from .shaft import Shaft
 
@@ -24,8 +24,8 @@ class Axle:
         self.head = None
         self.tail = None
         if not isinstance(shaft, Shaft):
-            raise ShaftValidationError(
-                "Invalid rotor shaft",
+            raise AxleValidationError(
+                "Invalid rotor axle",
                 errors=[InvalidValue(
                     field="shaft",
                     code="invalid_type",

@@ -9,7 +9,13 @@ class PlugValidationError(ComponentValidationError):
     component = "plug"
 
 
+class PlugRegistryValidationError(ComponentValidationError):
+    """Represent an invalid plug registry."""
+
+    component = "plugregistry"
+
+
 class PlugboardValidationError(ComponentValidationError):
-    """Represent an invalid plugboard."""
+    """Represent an invalid finalized plugboard."""
 
     component = "plugboard"

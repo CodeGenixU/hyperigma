@@ -66,7 +66,7 @@ class Plug:
         return character in self.plug
 
     @staticmethod
-    def test(cycle: Union[List[str], Tuple[str, ...], Set[str], str]) -> List[InvalidValue]:
+    def test(cycle: Union[List[str], Tuple[str, ...]]) -> List[InvalidValue]:
         """Validate a plugboard cycle.
 
         Args:
@@ -93,6 +93,18 @@ class Plug:
                 code="empty_cycle",
                 message="Plug cycle cannot be empty",
             ))
+        invalid_characters = [
+            character for character in cycle
+            if not isinstance(character, str) or len(character) != 1
+        ]
+        if invalid_characters:
+            errors.append(InvalidValue(
+                field="plug",
+                code="invalid_character",
+                message="Plug cycles must contain single-character strings",
+                extra_info=invalid_characters,
+            ))
+            return errors
 
         unique_chars = set(cycle)
         if len(unique_chars) != len(cycle):

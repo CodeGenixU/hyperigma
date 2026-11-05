@@ -6,7 +6,7 @@ from .configuration import (
     ConfigurationLoadError,
     ConfigurationValidationError,
 )
-from .plug import PlugValidationError, PlugboardValidationError
+from .plug import PlugValidationError, PlugboardValidationError, PlugRegistryValidationError
 from .rotor import RotorStateValidationError, RotorValidationError
-from .shaft import ShaftValidationError
+from .mechanism import ShaftValidationError, AxleValidationError
 from .validation import ComponentValidationError, ValidationError

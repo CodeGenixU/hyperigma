@@ -1,74 +1,10 @@
-"""
-Axiom - Beast of an Ancient Legend
---------------------------------------------
-This module simulates the Enigma encryption machine, including rotors, plugboard, and encoding logic.
-Configuration is loaded from a dictionary or JSON file (see Configuration Structure for format).
-
-Architecture & Decoupled Components:
-------------------------------------
-- Plug: Independent, reusable plugboard cycle logic for character swapping.
-- Plugboard: Independent, reusable collection of Plug objects with non-overlapping validation.
-- Rotor: Independent, reusable, immutable rotor wiring specification and index substitution logic.
-- RotorState: Independent, reusable active state wrapper for a Rotor (position, pointer, stepping).
-- Configuration: Configuration loading, normalization, and pre-validation.
-- Enigma: Main machine controller orchestrating rotors, plugboard, and encoding/decoding.
-
-Configuration Structure:
-----------------------------------------------
-{
-    "setting": {
-        "number_of_rotors": 3,
-        "sequence_of_rotor": "r1>r2>r3",  # or ["r1", "r2", "r3"]
-        "iteration": 25,
-        "rotation_factor": 0,
-        "plugs": ["ABCD", ...]
-    },
-    "characters": [...],
-    "r1": [...],
-    "r2": [...],
-    "r3": [...]
-}
-
-Module Contents:
-----------------
-Classes:
-    Enigma: Main machine controller (encoding/decoding)
-    Rotor: Reusable rotor wiring specification
-    RotorState: Reusable rotor active state (position & pointer)
-    Plug: Reusable single plugboard cycle
-    Plugboard: Reusable collection of plugs
-    Configuration: Machine configuration manager and validator
-
-Functions:
-    - check_type(config): Load and validate configuration from dict, JSON file path, or Path object
-    - plug_test(plugs): Validate plugboard cycles for repeated characters and conflicts
-    - rotor_test(n, rotor): Validate rotor wiring as a proper permutation of n character indices
-    - pretest(file): Comprehensive configuration validation including rotors, plugs, and characters
-
-Exceptions:
-    EnigmaError, ConfigurationError, InvalidCharacterError, ValidationError
-
-Usage Example:
--------------
-Usage: python Enigma.py
-When run as a script, load ``configure.json`` and print an example
-encode/decode demonstration.
-
-    >>> from Enigma import Enigma, Rotor, RotorState, Plug, Plugboard
-    >>> enigma = Enigma("configure.json")
-    >>> encoded = enigma.encode("HELLO")
-    >>> decoded = Enigma("configure.json").decode(encoded)
-    >>> print(decoded)  # 'HELLO'
-"""
-
-
-
 import logging
 
 from components.configuration.configuration import Configuration
-from components.exceptions.character import InvalidCharacterError
-from components.exceptions.configuration import ValidationError
+from components.exceptions import InvalidCharacterError, ValidationError
 from components.mechanism.axle import Axle
+from components.plug.plugboard import Plugboard
+
 # Configure logging
 logger = logging.getLogger(__name__)
 if not logger.handlers:
@@ -106,10 +42,10 @@ class Enigma:
         if not config.validate():
             raise ValidationError("Invalid Enigma configuration")
         self.characterSet = config.characters
-        self.plugboard = config.plugboard
         self.pointer = config.iteration
         self.size = config.size
         self.axle = Axle(config.shaft)
+        self.plugboard = Plugboard(config.registry)
 
         # Log initialization
         logger.info(f"Enigma initialized")
