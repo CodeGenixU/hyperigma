@@ -3,14 +3,14 @@
 from typing import Optional, List, Tuple, Set, Dict, Union
 
 from ..exceptions import CharacterSetValidationError, InvalidCharacterError
-from ..DTO.invalid_values import InvalidValue
+from ..DTO import InvalidValue
 
 class CharacterSet:
     """
     Reusable component for validating and managing the character set used in the Enigma machine.
     Ensures uniqueness and single-character constraints.
     """
-    def __init__(self, characters: Union[List[str], Tuple[str, ...], Set[str]]) -> None:
+    def __init__(self, characters: Union[List[str], Tuple[str, ...]]) -> None:
         """
         Initialize the character set with validation.
         
