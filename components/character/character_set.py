@@ -24,7 +24,7 @@ class CharacterSet:
         if errors:
             raise CharacterSetValidationError("Invalid character set", errors=errors)
 
-        self.characters = set(characters)
+        self.characters = tuple(characters)
         self.char_to_idx = {char: i for i, char in enumerate(self.characters)}
         self.idx_to_char = {i: char for i, char in enumerate(self.characters)}
         self.size = len(self.characters)
@@ -62,7 +62,7 @@ class CharacterSet:
         return self.idx_to_char[index]
 
     @staticmethod
-    def test(characters: Union[List[str], Tuple[str, ...], Set[str]]) -> List[InvalidValue]:
+    def test(characters: Union[List[str], Tuple[str, ...]]) -> List[InvalidValue]:
         """Validate characters for duplicates and invalid lengths.
 
         Args:
@@ -74,11 +74,22 @@ class CharacterSet:
 
         errors = []
 
-        if not isinstance(characters, (list, tuple, set)):
+        if not isinstance(characters, (list, tuple)):
             errors.append(InvalidValue(
                 field="characters",
                 code="invalid_type",
                 message="Characters must be a list, tuple, or set",
+            ))
+            return errors
+
+
+        non_single_chars = [char for char in characters if not isinstance(char, str) or len(char) != 1]
+        if non_single_chars:
+            errors.append(InvalidValue(
+                field="characters",
+                code="invalid_character",
+                message="Non-single character elements found",
+                extra_info=non_single_chars,
             ))
             return errors
 
@@ -91,16 +102,6 @@ class CharacterSet:
                 message="Duplicate characters found",
                 extra_info=duplicates,
             ))
-
-        non_single_chars = [char for char in characters if not isinstance(char, str) or len(char) != 1]
-        if non_single_chars:
-            errors.append(InvalidValue(
-                field="characters",
-                code="invalid_character",
-                message="Non-single character elements found",
-                extra_info=non_single_chars,
-            ))
-
         return errors
 
     def __repr__(self) -> str:

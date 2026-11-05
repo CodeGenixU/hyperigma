@@ -100,8 +100,8 @@ class Configuration:
         if errors:
             raise ConfigurationValidationError("Invalid configuration", errors=errors)
 
-        self.factor = config["setting"]["factor"]
-        self.iteration = config["setting"]["iteration"]
+        self.factor = config["setting"].get("factor", 0) 
+        self.iteration = config["setting"].get("iteration", 0)
 
         errors.extend(CharacterSet.test(config["characters"]))
         if errors:

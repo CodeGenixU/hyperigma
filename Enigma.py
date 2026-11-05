@@ -44,7 +44,8 @@ class Enigma:
         self.characterSet = config.characters
         self.pointer = config.iteration
         self.size = config.size
-        self.axle = Axle(config.shaft)
+        self.factor = config.factor
+        self.axle = Axle(shaft = config.shaft, initial_position = self.pointer, rotation_base = config.factor)
         self.plugboard = Plugboard(config.registry)
 
         # Log initialization
